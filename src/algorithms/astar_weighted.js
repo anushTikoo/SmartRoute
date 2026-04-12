@@ -1,14 +1,98 @@
 // Weighted A* (ε-admissible A*) with ε=3.0
 // Uses a weighted heuristic to explore fewer nodes, trading optimality for speed
+// Time Complexity: O(E log V) with binary heap
+//Giving more weightage to heuristic (manhattan distance in this case)
 
 // Manhattan distance heuristic
 function manhattanDistance(nodeA, nodeB) {
   return Math.abs(nodeA.row - nodeB.row) + Math.abs(nodeA.col - nodeB.col);
 }
 
+// Min-Heap class for priority queue
+class MinHeap {
+  constructor() {
+    this.heap = [];
+  }
+
+  parent(i) {
+    return Math.floor((i - 1) / 2);
+  }
+
+  leftChild(i) {
+    return 2 * i + 1;
+  }
+
+  rightChild(i) {
+    return 2 * i + 2;
+  }
+
+  swap(i, j) {
+    [this.heap[i], this.heap[j]] = [this.heap[j], this.heap[i]];
+  }
+
+  bubbleUp(i) {
+    while (i > 0 && this.heap[this.parent(i)].fScore > this.heap[i].fScore) {
+      this.swap(i, this.parent(i));
+      i = this.parent(i);
+    }
+  }
+
+  bubbleDown(i) {
+    let minIndex = i;
+    const left = this.leftChild(i);
+    const right = this.rightChild(i);
+
+    if (left < this.heap.length && this.heap[left].fScore < this.heap[minIndex].fScore) {
+      minIndex = left;
+    }
+    if (right < this.heap.length && this.heap[right].fScore < this.heap[minIndex].fScore) {
+      minIndex = right;
+    }
+
+    if (i !== minIndex) {
+      this.swap(i, minIndex);
+      this.bubbleDown(minIndex);
+    }
+  }
+
+  insert(node) {
+    this.heap.push(node);
+    this.bubbleUp(this.heap.length - 1);
+  }
+
+  extractMin() {
+    if (this.heap.length === 0) return null;
+    if (this.heap.length === 1) return this.heap.pop();
+
+    const min = this.heap[0];
+    this.heap[0] = this.heap.pop();
+    this.bubbleDown(0);
+    return min;
+  }
+
+  isEmpty() {
+    return this.heap.length === 0;
+  }
+
+  size() {
+    return this.heap.length;
+  }
+
+  decreaseKey(node, newFScore) {
+    const index = this.heap.indexOf(node);
+    if (index === -1) return;
+    node.fScore = newFScore;
+    this.bubbleUp(index);
+  }
+
+  includes(node) {
+    return this.heap.includes(node);
+  }
+}
+
 export function astarWeighted(grid, startNode, finishNode) {
   const visitedNodesInOrder = [];
-  const openSet = [startNode];
+  const openSet = new MinHeap();
   const closedSet = new Set();
   const epsilon = 3.0; // Weight factor - makes heuristic more dominant (ε>1 = greedy)
 
@@ -25,21 +109,11 @@ export function astarWeighted(grid, startNode, finishNode) {
   startNode.gScore = 0;
   startNode.fScore = epsilon * manhattanDistance(startNode, finishNode);
   startNode.previousNode = null;
+  openSet.insert(startNode);
 
-  while (openSet.length > 0) {
-    // Find node with lowest fScore
-    let currentNode = openSet[0];
-    let currentIndex = 0;
-
-    for (let i = 1; i < openSet.length; i++) {
-      if (openSet[i].fScore < currentNode.fScore) {
-        currentNode = openSet[i];
-        currentIndex = i;
-      }
-    }
-
-    // Remove current from openSet and add to closedSet
-    openSet.splice(currentIndex, 1);
+  while (!openSet.isEmpty()) {
+    // Extract node with lowest fScore - O(log V)
+    const currentNode = openSet.extractMin();
     closedSet.add(`${currentNode.row},${currentNode.col}`);
 
     if (currentNode.isWall) continue;
@@ -63,8 +137,7 @@ export function astarWeighted(grid, startNode, finishNode) {
 
       const tentativeGScore = currentNode.gScore + neighbor.weight;
 
-      const neighborKey = `${neighbor.row},${neighbor.col}`;
-      const inOpenSet = openSet.some(n => n === neighbor);
+      const inOpenSet = openSet.includes(neighbor);
 
       if (!inOpenSet || tentativeGScore < neighbor.gScore) {
         neighbor.previousNode = currentNode;
@@ -72,7 +145,9 @@ export function astarWeighted(grid, startNode, finishNode) {
         neighbor.fScore = neighbor.gScore + epsilon * manhattanDistance(neighbor, finishNode);
 
         if (!inOpenSet) {
-          openSet.push(neighbor);
+          openSet.insert(neighbor);
+        } else {
+          openSet.decreaseKey(neighbor, neighbor.fScore);
         }
       }
     }
