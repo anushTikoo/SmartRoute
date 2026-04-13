@@ -5,6 +5,12 @@ import { bfs } from '../algorithms/bfs';
 import { astar } from '../algorithms/astar';
 import { astarWeighted } from '../algorithms/astar_weighted';
 
+// Import noise generation libraries for procedural map generation
+// simplex-noise provides 2D simplex noise for smooth, natural-looking terrain
+// alea is a seeded random number generator that ensures reproducible results
+import { createNoise2D } from 'simplex-noise';
+import alea from 'alea';
+
 const ROWS = 30;
 const COLS = 30;
 
@@ -13,7 +19,89 @@ const DEFAULT_START_COL = 5;
 const DEFAULT_FINISH_ROW = 25;
 const DEFAULT_FINISH_COL = 25;
 
-function createNode(row, col, startRow, startCol, finishRow, finishCol) {
+/**
+ * Generates a procedural map using seeded noise for deterministic terrain and obstacles.
+ *
+ * This function creates a 30x30 grid where each cell has:
+ * - A weight value (1-9) determined by terrain noise for pathfinding costs
+ * - An optional obstacle flag for impassable walls
+ *
+ * The generation uses two independent noise instances:
+ * 1. Terrain noise: Creates clusters of similar terrain weights using low-frequency sampling (0.1 scale)
+ * 2. Obstacle noise: Creates natural obstacle clusters using slightly different frequency (0.12 scale)
+ *
+ * Using different seeds for each noise instance ensures terrain and obstacles are decorrelated,
+ * producing more natural-looking maps where obstacles don't always appear in the same terrain type.
+ *
+ * @param {string} seed - The seed string for deterministic generation. Same seed always produces the same map.
+ * @returns {Array<Array<Object>>} A 2D array of cell objects with weight and obstacle properties
+ */
+function generateMap(seed) {
+  // Create the terrain noise instance with a seed derived from the base seed + 'terrain' suffix.
+  // This ensures the terrain noise is independent from obstacle noise even with the same base seed.
+  // alea() creates a seeded random function that produces the same sequence for the same seed.
+  const terrainNoise = createNoise2D(alea(seed + 'terrain'));
+
+  // Create the obstacle noise instance with a different seed suffix for independence.
+  // Using 'obstacle' suffix ensures obstacle placement is decorrelated from terrain type.
+  const obstacleNoise = createNoise2D(alea(seed + 'obstacle'));
+
+  // Generate the 30x30 grid using nested Array.from calls
+  // Outer Array.from creates 30 rows (indexed by r)
+  return Array.from({ length: 30 }, (_, r) =>
+    // Inner Array.from creates 30 columns for each row (indexed by c)
+    Array.from({ length: 30 }, (_, c) => {
+      // Sample obstacle noise at coordinates scaled by 0.12 to create clustered obstacle patterns.
+      // The 0.12 scale is slightly higher than terrain (0.1) to create finer, more varied obstacle clusters.
+      // Lower scale values = larger, smoother features. Higher = more detailed, granular patterns.
+      const obstacleVal = obstacleNoise(c * 0.12, r * 0.12);
+
+      // If obstacle noise exceeds threshold (0.55), mark this cell as an impassable wall.
+      // The 0.55 threshold is chosen to create ~20-30% obstacle coverage with natural clustering.
+      // Cells with obstacleVal > 0.55 become walls with Infinity weight (completely impassable).
+      if (obstacleVal > 0.55) return { weight: Infinity, obstacle: true };
+
+      // Sample terrain noise at coordinates scaled by 0.1 to create large, smooth terrain regions.
+      // The 0.1 scale produces continent-sized features where similar terrain types cluster together.
+      // This creates natural-looking "biomes" of easy/hard traversal areas.
+      const val = terrainNoise(c * 0.1, r * 0.1);
+
+      // Map the continuous noise value (-1 to 1) to discrete weight categories (1-9).
+      // Simplex noise typically outputs values in approximately [-1, 1] range.
+      // We use threshold-based classification to create distinct terrain types:
+      // - Weight 9: Very difficult terrain (val > 0.6) - highest movement cost
+      // - Weight 7: Difficult terrain (val > 0.35)
+      // - Weight 5: Moderate terrain (val > 0.1)
+      // - Weight 3: Easy terrain (val > -0.1)
+      // - Weight 2: Very easy terrain (val > -0.4)
+      // - Weight 1: Easiest terrain (val <= -0.4) - lowest movement cost
+      //
+      // These thresholds are tuned to produce a balanced distribution of terrain types,
+      // with more moderate terrain (weights 3-5) being most common.
+      if (val > 0.6)  return { weight: 9 };
+      if (val > 0.35) return { weight: 7 };
+      if (val > 0.1)  return { weight: 5 };
+      if (val > -0.1) return { weight: 3 };
+      if (val > -0.4) return { weight: 2 };
+      return { weight: 1 };
+    })
+  );
+}
+
+/**
+ * Creates a grid node with the specified properties.
+ *
+ * @param {number} row - Row index of the node
+ * @param {number} col - Column index of the node
+ * @param {number} startRow - Row index of the start node
+ * @param {number} startCol - Column index of the start node
+ * @param {number} finishRow - Row index of the finish node
+ * @param {number} finishCol - Column index of the finish node
+ * @param {number} weight - The terrain weight for this cell (default: 1)
+ * @param {boolean} isObstacle - Whether this cell is an impassable obstacle (default: false)
+ * @returns {Object} The node object with all grid properties
+ */
+function createNode(row, col, startRow, startCol, finishRow, finishCol, weight = 1, isObstacle = false) {
   return {
     row,
     col,
@@ -21,18 +109,39 @@ function createNode(row, col, startRow, startCol, finishRow, finishCol) {
     isFinish: row === finishRow && col === finishCol,
     distance: Infinity,
     isVisited: false,
-    isWall: false,
+    isWall: isObstacle, // Map obstacle flag to isWall for compatibility with existing pathfinding
     previousNode: null,
-    weight: Math.floor(Math.random() * 9) + 1,
+    weight: weight,
   };
 }
 
-function getInitialGrid(startRow, startCol, finishRow, finishCol) {
+/**
+ * Creates the initial grid with procedurally generated terrain.
+ *
+ * This function uses the generateMap function to create terrain and obstacles,
+ * then wraps each cell in a node structure compatible with the pathfinding algorithms.
+ *
+ * @param {number} startRow - Row index of the start node
+ * @param {number} startCol - Column index of the start node
+ * @param {number} finishRow - Row index of the finish node
+ * @param {number} finishCol - Column index of the finish node
+ * @param {string} seed - Seed for procedural generation
+ * @returns {Array<Array<Object>>} The initialized grid with terrain and obstacles
+ */
+function getInitialGrid(startRow, startCol, finishRow, finishCol, seed) {
+  // Generate the procedural terrain map using the provided seed.
+  // The seed ensures that the same input always produces the exact same output.
+  // This is crucial for reproducibility - sharing a seed means sharing the exact same map.
+  const mapData = generateMap(seed);
+
   const grid = [];
   for (let row = 0; row < ROWS; row++) {
     const currentRow = [];
     for (let col = 0; col < COLS; col++) {
-      currentRow.push(createNode(row, col, startRow, startCol, finishRow, finishCol));
+      // Extract weight and obstacle flag from generated map data
+      const cellData = mapData[row][col];
+      // Create a node that combines position info with terrain properties
+      currentRow.push(createNode(row, col, startRow, startCol, finishRow, finishCol, cellData.weight, cellData.obstacle));
     }
     grid.push(currentRow);
   }
@@ -40,10 +149,28 @@ function getInitialGrid(startRow, startCol, finishRow, finishCol) {
 }
 
 function Grid() {
+  // State for start and finish node positions on the grid
   const [startPos, setStartPos] = useState({ row: DEFAULT_START_ROW, col: DEFAULT_START_COL });
   const [finishPos, setFinishPos] = useState({ row: DEFAULT_FINISH_ROW, col: DEFAULT_FINISH_COL });
-  const [grid, setGrid] = useState(() => getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL));
+
+  // State for the seed used in procedural map generation.
+  // Initialized with a default seed string for consistent initial experience.
+  // Users can change this to generate different maps or share seeds to reproduce specific maps.
+  const [mapSeed, setMapSeed] = useState('default-seed-123');
+
+  // State for the grid itself, initialized lazily using the default seed.
+  // The useState callback ensures generateMap is only called once during initial render.
+  const [grid, setGrid] = useState(() => getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL, 'default-seed-123'));
+
+  // State to track if any pathfinding algorithm is currently running (for UI disabling)
   const [isRunning, setIsRunning] = useState(false);
+
+  // State to control visibility of visited nodes after animation completes.
+  // During animation: always true (visited nodes are shown as they are discovered)
+  // After animation: defaults to false (visited nodes hidden, only path shown)
+  // User can toggle this to review which nodes were explored by the algorithm.
+  const [showVisitedNodes, setShowVisitedNodes] = useState(true);
+
   const [algorithm, setAlgorithm] = useState('dijkstra');
   const [dijkstraResult, setDijkstraResult] = useState(null);
   const [bfsResult, setBfsResult] = useState(null);
@@ -267,6 +394,9 @@ function Grid() {
     // If no path, skip animation and mark complete
     if (shortestPath.length === 0) {
       setIsRunning(false);
+      // After animation completes (even with no path), hide visited nodes by default
+      // User can toggle them back on if they want to see explored nodes
+      setShowVisitedNodes(false);
       if (algo === 'dijkstra') {
         setDijkstraComplete(true);
       } else if (algo === 'bfs') {
@@ -284,6 +414,10 @@ function Grid() {
       if (step >= shortestPath.length) {
         clearInterval(pathInterval);
         setIsRunning(false);
+        // Animation complete: hide visited nodes by default, showing only the path
+        // This makes the final result cleaner - users see the path clearly against terrain colors
+        // They can toggle visited nodes back on using the button if they want to review algorithm exploration
+        setShowVisitedNodes(false);
         if (algo === 'dijkstra') {
           setDijkstraComplete(true);
         } else if (algo === 'bfs') {
@@ -311,11 +445,79 @@ function Grid() {
     }, 100);
   };
 
+  /**
+   * Generates a new random seed string for map generation.
+   * Uses timestamp and random components to create unique seeds.
+   * Each call produces a different seed, resulting in a completely different map.
+   *
+   * @returns {string} A randomly generated seed string
+   */
+  const generateRandomSeed = useCallback(() => {
+    // Combine timestamp (for uniqueness) with random number (for extra entropy)
+    // toString(36) converts to alphanumeric string for readability
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  }, []);
+
+  /**
+   * Regenerates the map with a new seed and resets all algorithm state.
+   * This is called when the user clicks "Randomize" or manually changes the seed.
+   *
+   * IMPORTANT: Re-runs ALT landmark precomputation implicitly by clearing all
+   * cached pathfinding results. In a full ALT (A* with Landmarks and Triangle inequality)
+   * implementation, this is where landmark distances would be recomputed for the new map.
+   *
+   * @param {string} newSeed - The new seed to use for map generation
+   */
+  const regenerateMap = useCallback((newSeed) => {
+    // Prevent map regeneration while algorithms are running to avoid state inconsistencies
+    if (isRunning) return;
+
+    // Update the seed state to reflect the new map
+    setMapSeed(newSeed);
+
+    // Reset start and finish positions to their defaults.
+    // This ensures they don't end up inside obstacles on the new map.
+    setStartPos({ row: DEFAULT_START_ROW, col: DEFAULT_START_COL });
+    setFinishPos({ row: DEFAULT_FINISH_ROW, col: DEFAULT_FINISH_COL });
+
+    // Generate a completely new grid using the provided seed.
+    // The generateMap function ensures the same seed always produces the same terrain.
+    setGrid(getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL, newSeed));
+
+    // Clear all algorithm results and cached state.
+    // This effectively "re-runs" precomputation by forcing algorithms to recalculate
+    // on the new map topology rather than using stale cached results.
+    setDijkstraResult(null);
+    setBfsResult(null);
+    setAstarResult(null);
+    setAstarWeightedResult(null);
+    setDijkstraComplete(false);
+    setBfsComplete(false);
+    setAstarComplete(false);
+    setAstarWeightedComplete(false);
+
+    // Clear cached visited nodes and paths for all algorithms.
+    // These caches store visualization state and must be invalidated when the map changes.
+    setDijkstraVisitedNodes([]);
+    setDijkstraPath([]);
+    setBfsVisitedNodes([]);
+    setBfsPath([]);
+    setAstarVisitedNodes([]);
+    setAstarPath([]);
+    setAstarWeightedVisitedNodes([]);
+    setAstarWeightedPath([]);
+  }, [isRunning]);
+
+  /**
+   * Resets the grid to its initial state using the current seed.
+   * This clears path visualizations but keeps the same map terrain.
+   */
   const resetGrid = useCallback(() => {
     if (isRunning) return;
     setStartPos({ row: DEFAULT_START_ROW, col: DEFAULT_START_COL });
     setFinishPos({ row: DEFAULT_FINISH_ROW, col: DEFAULT_FINISH_COL });
-    setGrid(getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL));
+    // Re-generate using the current seed to maintain the same map terrain
+    setGrid(getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL, mapSeed));
     setDijkstraResult(null);
     setBfsResult(null);
     setAstarResult(null);
@@ -333,7 +535,7 @@ function Grid() {
     setAstarPath([]);
     setAstarWeightedVisitedNodes([]);
     setAstarWeightedPath([]);
-  }, [isRunning]);
+  }, [isRunning, mapSeed]);
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -397,6 +599,40 @@ function Grid() {
         </div>
       )}
 
+      {/* Seed input section - allows users to enter custom seeds or randomize */}
+      <div className="flex gap-2 items-center bg-white p-3 rounded shadow-sm border border-gray-200">
+        <label htmlFor="seed-input" className="text-sm font-semibold text-gray-700">
+          Map Seed:
+        </label>
+        <input
+          id="seed-input"
+          type="text"
+          value={mapSeed}
+          onChange={(e) => setMapSeed(e.target.value)}
+          disabled={isRunning}
+          className="px-3 py-1 border border-gray-300 rounded text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          placeholder="Enter seed..."
+          title="Enter any text to generate a specific map. Same seed = same map."
+        />
+        <button
+          onClick={() => regenerateMap(mapSeed)}
+          disabled={isRunning}
+          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          title="Generate map from current seed"
+        >
+          Generate
+        </button>
+        <button
+          onClick={() => regenerateMap(generateRandomSeed())}
+          disabled={isRunning}
+          className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          title="Generate a random map with a new seed"
+        >
+          Randomize
+        </button>
+      </div>
+
+      {/* Primary action buttons for running algorithms and resetting */}
       <div className="flex gap-4">
         <button
           onClick={runAlgorithm}
@@ -410,7 +646,20 @@ function Grid() {
           disabled={isRunning}
           className="px-4 py-2 bg-gray-600 text-white rounded disabled:bg-gray-400"
         >
-          Reset/Randomize
+          Reset
+        </button>
+      </div>
+
+      {/* Toggle button to show/hide visited nodes after animation completes */}
+      {/* During animation this has no effect; after animation it toggles visibility */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowVisitedNodes(prev => !prev)}
+          disabled={isRunning}
+          className={`px-3 py-1 rounded text-sm ${showVisitedNodes ? 'bg-blue-400 text-white' : 'bg-gray-200 text-gray-700'}`}
+          title={showVisitedNodes ? 'Hide visited nodes (showing terrain colors)' : 'Show visited nodes explored by algorithm'}
+        >
+          {showVisitedNodes ? 'Hide Visited Nodes' : 'Show Visited Nodes'}
         </button>
       </div>
 
@@ -489,7 +738,8 @@ function Grid() {
         </button>
       </div>
 
-      <div className="flex gap-4 text-sm flex-wrap justify-center">
+      {/* Legend explaining the visual elements of the grid */}
+      <div className="flex gap-4 text-sm flex-wrap justify-center bg-white p-3 rounded shadow-sm border border-gray-200">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-green-500"></div>
           <span>Start</span>
@@ -500,7 +750,7 @@ function Grid() {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-gray-800"></div>
-          <span>Wall</span>
+          <span>Wall (obstacle)</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-blue-400"></div>
@@ -512,7 +762,7 @@ function Grid() {
         </div>
         <div className="flex items-center gap-2">
           <span className="font-bold">1-9</span>
-          <span>Cell Weights (random)</span>
+          <span>Terrain Weights (procedural)</span>
         </div>
       </div>
 
@@ -529,6 +779,7 @@ function Grid() {
               isVisited={node.isVisited}
               isInPath={node.isInPath}
               weight={node.weight}
+              showVisited={showVisitedNodes}
               onClick={handleCellClick}
             />
           ))
