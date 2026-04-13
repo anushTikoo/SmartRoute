@@ -8,17 +8,17 @@ import { astarWeighted } from '../algorithms/astar_weighted';
 const ROWS = 30;
 const COLS = 30;
 
-const START_NODE_ROW = 5;
-const START_NODE_COL = 5;
-const FINISH_NODE_ROW = 25;
-const FINISH_NODE_COL = 25;
+const DEFAULT_START_ROW = 5;
+const DEFAULT_START_COL = 5;
+const DEFAULT_FINISH_ROW = 25;
+const DEFAULT_FINISH_COL = 25;
 
-function createNode(row, col) {
+function createNode(row, col, startRow, startCol, finishRow, finishCol) {
   return {
     row,
     col,
-    isStart: row === START_NODE_ROW && col === START_NODE_COL,
-    isFinish: row === FINISH_NODE_ROW && col === FINISH_NODE_COL,
+    isStart: row === startRow && col === startCol,
+    isFinish: row === finishRow && col === finishCol,
     distance: Infinity,
     isVisited: false,
     isWall: false,
@@ -27,12 +27,12 @@ function createNode(row, col) {
   };
 }
 
-function getInitialGrid() {
+function getInitialGrid(startRow, startCol, finishRow, finishCol) {
   const grid = [];
   for (let row = 0; row < ROWS; row++) {
     const currentRow = [];
     for (let col = 0; col < COLS; col++) {
-      currentRow.push(createNode(row, col));
+      currentRow.push(createNode(row, col, startRow, startCol, finishRow, finishCol));
     }
     grid.push(currentRow);
   }
@@ -40,7 +40,9 @@ function getInitialGrid() {
 }
 
 function Grid() {
-  const [grid, setGrid] = useState(getInitialGrid());
+  const [startPos, setStartPos] = useState({ row: DEFAULT_START_ROW, col: DEFAULT_START_COL });
+  const [finishPos, setFinishPos] = useState({ row: DEFAULT_FINISH_ROW, col: DEFAULT_FINISH_COL });
+  const [grid, setGrid] = useState(() => getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL));
   const [isRunning, setIsRunning] = useState(false);
   const [algorithm, setAlgorithm] = useState('dijkstra');
   const [dijkstraResult, setDijkstraResult] = useState(null);
@@ -62,11 +64,39 @@ function Grid() {
   const [astarWeightedVisitedNodes, setAstarWeightedVisitedNodes] = useState([]);
   const [astarWeightedPath, setAstarWeightedPath] = useState([]);
 
-  const [editMode, setEditMode] = useState('wall'); // 'wall' or 'weight'
+  const [editMode, setEditMode] = useState('wall'); // 'wall', 'weight', 'start', or 'finish'
   const animationStartTime = useRef(null);
 
   const handleCellClick = useCallback((row, col) => {
     if (isRunning) return;
+
+    // Handle moving start node
+    if (editMode === 'start') {
+      if (row === finishPos.row && col === finishPos.col) return; // Can't place on finish
+      const oldStart = startPos;
+      setStartPos({ row, col });
+      setGrid(prevGrid => {
+        const newGrid = prevGrid.map(r => r.map(node => ({ ...node })));
+        newGrid[oldStart.row][oldStart.col].isStart = false;
+        newGrid[row][col].isStart = true;
+        return newGrid;
+      });
+      return;
+    }
+
+    // Handle moving finish node
+    if (editMode === 'finish') {
+      if (row === startPos.row && col === startPos.col) return; // Can't place on start
+      const oldFinish = finishPos;
+      setFinishPos({ row, col });
+      setGrid(prevGrid => {
+        const newGrid = prevGrid.map(r => r.map(node => ({ ...node })));
+        newGrid[oldFinish.row][oldFinish.col].isFinish = false;
+        newGrid[row][col].isFinish = true;
+        return newGrid;
+      });
+      return;
+    }
 
     setGrid(prevGrid => {
       const newGrid = [...prevGrid];
@@ -83,7 +113,7 @@ function Grid() {
       }
       return newGrid;
     });
-  }, [isRunning, editMode]);
+  }, [isRunning, editMode, startPos, finishPos]);
 
   const clearPath = useCallback(() => {
     setGrid(prevGrid => {
@@ -141,7 +171,7 @@ function Grid() {
     // Clear previous path
     clearPath();
 
-    const freshGrid = getInitialGrid();
+    const freshGrid = getInitialGrid(startPos.row, startPos.col, finishPos.row, finishPos.col);
     // Copy wall status and weights from current grid
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
@@ -150,8 +180,8 @@ function Grid() {
       }
     }
 
-    const startNode = freshGrid[START_NODE_ROW][START_NODE_COL];
-    const finishNode = freshGrid[FINISH_NODE_ROW][FINISH_NODE_COL];
+    const startNode = freshGrid[startPos.row][startPos.col];
+    const finishNode = freshGrid[finishPos.row][finishPos.col];
 
     let visitedNodes, shortestPath;
     if (algorithm === 'dijkstra') {
@@ -283,7 +313,9 @@ function Grid() {
 
   const resetGrid = useCallback(() => {
     if (isRunning) return;
-    setGrid(getInitialGrid());
+    setStartPos({ row: DEFAULT_START_ROW, col: DEFAULT_START_COL });
+    setFinishPos({ row: DEFAULT_FINISH_ROW, col: DEFAULT_FINISH_COL });
+    setGrid(getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL));
     setDijkstraResult(null);
     setBfsResult(null);
     setAstarResult(null);
@@ -425,7 +457,7 @@ function Grid() {
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap justify-center">
         <span className="text-sm font-semibold self-center">Edit Mode:</span>
         <button
           onClick={() => setEditMode('wall')}
@@ -440,6 +472,20 @@ function Grid() {
           className={`px-3 py-1 rounded text-sm ${editMode === 'weight' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}
         >
           Weight (click to cycle 1-9)
+        </button>
+        <button
+          onClick={() => setEditMode('start')}
+          disabled={isRunning}
+          className={`px-3 py-1 rounded text-sm ${editMode === 'start' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
+        >
+          Move Start
+        </button>
+        <button
+          onClick={() => setEditMode('finish')}
+          disabled={isRunning}
+          className={`px-3 py-1 rounded text-sm ${editMode === 'finish' ? 'bg-red-500 text-white' : 'bg-gray-200'}`}
+        >
+          Move Finish
         </button>
       </div>
 
