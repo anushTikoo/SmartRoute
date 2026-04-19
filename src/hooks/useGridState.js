@@ -1,22 +1,22 @@
 /**
  * useGridState Hook
- * 
+ *
  * This custom hook manages all state related to the grid itself:
  * - Grid data structure (2D array of nodes)
  * - Start and finish node positions
  * - Map seed for procedural generation
  * - Edit mode for user interactions
  * - Visited nodes visibility toggle
- * 
+ *
  * Encapsulating grid state in a hook keeps the main Grid component cleaner
  * and makes it easier to reuse grid state logic if needed elsewhere.
  */
 
-import { useState, useCallback } from 'react';
-import { 
-  DEFAULT_START_ROW, 
-  DEFAULT_START_COL, 
-  DEFAULT_FINISH_ROW, 
+import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  DEFAULT_START_ROW,
+  DEFAULT_START_COL,
+  DEFAULT_FINISH_ROW,
   DEFAULT_FINISH_COL,
   DEFAULT_MAP_SEED,
   EDIT_MODES,
@@ -26,35 +26,40 @@ import { generateRandomSeed } from '../utils/mapGenerator';
 
 export function useGridState() {
   // State for start and finish node positions on the grid
-  const [startPos, setStartPos] = useState({ 
-    row: DEFAULT_START_ROW, 
-    col: DEFAULT_START_COL 
+  const [startPos, setStartPos] = useState({
+    row: DEFAULT_START_ROW,
+    col: DEFAULT_START_COL
   });
-  const [finishPos, setFinishPos] = useState({ 
-    row: DEFAULT_FINISH_ROW, 
-    col: DEFAULT_FINISH_COL 
+  const [finishPos, setFinishPos] = useState({
+    row: DEFAULT_FINISH_ROW,
+    col: DEFAULT_FINISH_COL
   });
-  
+
   // State for the seed used in procedural map generation.
   // Initialized with a default seed string for consistent initial experience.
   const [mapSeed, setMapSeed] = useState(DEFAULT_MAP_SEED);
-  
+
   // State for the grid itself, initialized lazily using the default seed.
   // The useState callback ensures generateMap is only called once during initial render.
-  const [grid, setGrid] = useState(() => 
+  const [grid, setGrid] = useState(() =>
     getInitialGrid(DEFAULT_START_ROW, DEFAULT_START_COL, DEFAULT_FINISH_ROW, DEFAULT_FINISH_COL, DEFAULT_MAP_SEED)
   );
-  
+
   // State to track if any pathfinding algorithm is currently running (for UI disabling)
   const [isRunning, setIsRunning] = useState(false);
-  
+
   // State to control visibility of visited nodes after animation completes.
   // During animation: always true (visited nodes are shown as they are discovered)
   // After animation: defaults to false (visited nodes hidden, only path shown)
   const [showVisitedNodes, setShowVisitedNodes] = useState(true);
-  
-  // Current edit mode: 'wall', 'weight', 'start', or 'finish'
+
   const [editMode, setEditMode] = useState(EDIT_MODES.WALL);
+
+  // Use refs to keep handleCellClick stable while accessing latest state
+  const stateRef = useRef({ editMode, isRunning, startPos, finishPos });
+  useEffect(() => {
+    stateRef.current = { editMode, isRunning, startPos, finishPos };
+  }, [editMode, isRunning, startPos, finishPos]);
 
   /**
    * Handles cell click events based on current edit mode.
@@ -64,6 +69,7 @@ export function useGridState() {
    * - 'finish': Move finish node to clicked cell
    */
   const handleCellClick = useCallback((row, col) => {
+    const { editMode, isRunning, startPos, finishPos } = stateRef.current;
     if (isRunning) return;
 
     // Handle moving start node
@@ -74,7 +80,13 @@ export function useGridState() {
       setGrid(prevGrid => {
         const newGrid = prevGrid.map(r => r.map(node => ({ ...node })));
         newGrid[oldStart.row][oldStart.col].isStart = false;
-        newGrid[row][col].isStart = true;
+        // Override wall status at new start position - clear wall and set default weight
+        newGrid[row][col] = {
+          ...newGrid[row][col],
+          isStart: true,
+          isWall: false,
+          weight: newGrid[row][col].weight === Infinity ? 1 : newGrid[row][col].weight
+        };
         return newGrid;
       });
       return;
@@ -88,7 +100,13 @@ export function useGridState() {
       setGrid(prevGrid => {
         const newGrid = prevGrid.map(r => r.map(node => ({ ...node })));
         newGrid[oldFinish.row][oldFinish.col].isFinish = false;
-        newGrid[row][col].isFinish = true;
+        // Override wall status at new finish position - clear wall and set default weight
+        newGrid[row][col] = {
+          ...newGrid[row][col],
+          isFinish: true,
+          isWall: false,
+          weight: newGrid[row][col].weight === Infinity ? 1 : newGrid[row][col].weight
+        };
         return newGrid;
       });
       return;
@@ -101,10 +119,17 @@ export function useGridState() {
       if (!node.isStart && !node.isFinish) {
         newGrid[row] = [...newGrid[row]];
         if (editMode === EDIT_MODES.WALL) {
-          newGrid[row][col] = { ...node, isWall: !node.isWall };
+          const newIsWall = !node.isWall;
+          newGrid[row][col] = {
+            ...node,
+            isWall: newIsWall,
+            // When removing wall, reset weight from Infinity to default (1)
+            // When adding wall, weight becomes Infinity
+            weight: newIsWall ? Infinity : (node.weight === Infinity ? 1 : node.weight)
+          };
         } else {
-          // Cycle weight through valid values: 1, 2, 3, 5, 7, 9
-          const weightSequence = [1, 2, 3, 5, 7, 9];
+          // Cycle weight through all valid values: 1-9
+          const weightSequence = [1, 2, 3, 4, 5, 6, 7, 8, 9];
           const currentIndex = weightSequence.indexOf(node.weight);
           const newWeight = weightSequence[(currentIndex + 1) % weightSequence.length];
           newGrid[row][col] = { ...node, weight: newWeight };
@@ -112,7 +137,7 @@ export function useGridState() {
       }
       return newGrid;
     });
-  }, [isRunning, editMode, startPos, finishPos]);
+  }, []);
 
   /**
    * Clears path and visited state from the grid.
@@ -130,12 +155,12 @@ export function useGridState() {
   /**
    * Regenerates the map with a new seed and resets positions.
    * Clears all algorithm state (effectively re-runs precomputation).
-   * 
+   *
    * @param {string} newSeed - The new seed to use for map generation
    */
   const regenerateMap = useCallback((newSeed) => {
     if (isRunning) return;
-    
+
     setMapSeed(newSeed);
     setStartPos({ row: DEFAULT_START_ROW, col: DEFAULT_START_COL });
     setFinishPos({ row: DEFAULT_FINISH_ROW, col: DEFAULT_FINISH_COL });
@@ -171,14 +196,14 @@ export function useGridState() {
     isRunning,
     showVisitedNodes,
     editMode,
-    
+
     // Setters
     setGrid,
     setIsRunning,
     setShowVisitedNodes,
     setEditMode,
     setMapSeed,
-    
+
     // Actions
     handleCellClick,
     clearPath,

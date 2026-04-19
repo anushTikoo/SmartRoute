@@ -1,257 +1,172 @@
-/**
- * GridControls Component
- * 
- * This component contains all the interactive controls for the grid:
- * - Map seed input and generation buttons
- * - Algorithm execution buttons
- * - Algorithm selection
- * - Edit mode selection
- * - Visited nodes toggle
- * 
- * Separating the UI controls keeps the main Grid component clean and focused
- * on the overall layout and state composition.
- */
-
 import { ALGORITHMS, EDIT_MODES } from '../constants/grid';
 
-/**
- * Button component for selecting the active algorithm.
- * Highlights when selected and restores that algorithm's visualization.
- * 
- * @param {Object} props
- * @param {string} props.algo - Algorithm identifier
- * @param {string} props.label - Display label
- * @param {string} props.currentAlgorithm - Currently selected algorithm
- * @param {boolean} props.isRunning - Whether an algorithm is currently running
- * @param {function} props.onSelect - Callback when button is clicked
- * @param {string} props.activeColor - Tailwind class for active state background
- */
-function AlgorithmButton({ algo, label, currentAlgorithm, isRunning, onSelect, activeColor }) {
-  const isActive = currentAlgorithm === algo;
-  
-  return (
-    <button
-      onClick={() => onSelect(algo)}
-      disabled={isRunning}
-      className={`px-3 py-1 rounded text-sm transition-colors ${
-        isActive ? `${activeColor} text-white` : 'bg-gray-200 hover:bg-gray-300'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-/**
- * Button component for selecting the edit mode.
- * 
- * @param {Object} props
- * @param {string} props.mode - Edit mode identifier
- * @param {string} props.label - Display label
- * @param {string} props.currentMode - Currently selected edit mode
- * @param {boolean} props.isRunning - Whether an algorithm is currently running
- * @param {function} props.onSelect - Callback when button is clicked
- * @param {string} props.activeColor - Tailwind class for active state background
- */
-function EditModeButton({ mode, label, currentMode, isRunning, onSelect, activeColor }) {
-  const isActive = currentMode === mode;
-  
-  return (
-    <button
-      onClick={() => onSelect(mode)}
-      disabled={isRunning}
-      className={`px-3 py-1 rounded text-sm transition-colors ${
-        isActive ? `${activeColor} text-white` : 'bg-gray-200 hover:bg-gray-300'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-/**
- * Main controls component that renders all grid control UI elements.
- * 
- * @param {Object} props - All control props from the parent Grid component
- */
 export function GridControls({
-  // Map generation props
   mapSeed,
   setMapSeed,
   onGenerateMap,
   onRandomizeMap,
-  
-  // Algorithm execution props
   algorithm,
   onAlgorithmChange,
   onRunAlgorithm,
   onResetGrid,
   isRunning,
-  
-  // Edit mode props
+  epsilon,
+  setEpsilon,
   editMode,
   setEditMode,
-  
-  // Visited nodes toggle props
   showVisitedNodes,
   setShowVisitedNodes,
 }) {
-  /**
-   * Gets the display name for the current algorithm for the Run button.
-   */
-  const getAlgorithmDisplayName = () => {
-    switch (algorithm) {
-      case ALGORITHMS.DIJKSTRA:
-        return 'Dijkstra';
-      case ALGORITHMS.ASTAR:
-        return 'A*';
-      case ALGORITHMS.ASTAR_WEIGHTED:
-        return 'Weighted A*';
-      case ALGORITHMS.BFS:
-        return 'BFS';
-      default:
-        return 'Algorithm';
-    }
-  };
-
   return (
     <>
-      {/* Map Seed Controls */}
-      <div className="flex gap-2 items-center bg-white p-3 rounded shadow-sm border border-gray-200">
-        <label htmlFor="seed-input" className="text-sm font-semibold text-gray-700">
-          Map Seed:
-        </label>
-        <input
-          id="seed-input"
-          type="text"
-          value={mapSeed}
-          onChange={(e) => setMapSeed(e.target.value)}
-          disabled={isRunning}
-          className="px-3 py-1 border border-gray-300 rounded text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-          placeholder="Enter seed..."
-          title="Enter any text to generate a specific map. Same seed = same map."
-        />
-        <button
-          onClick={onGenerateMap}
-          disabled={isRunning}
-          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          title="Generate map from current seed"
-        >
-          Generate
-        </button>
-        <button
-          onClick={onRandomizeMap}
-          disabled={isRunning}
-          className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          title="Generate a random map with a new seed"
-        >
-          Randomize
-        </button>
+      <div className="bg-surface-container-low rounded-xl p-5 space-y-5">
+        <div className="flex items-center space-x-2 text-primary">
+          <span className="material-symbols-outlined text-sm" data-icon="settings_input_component">settings_input_component</span>
+          <h2 className="text-xs font-bold uppercase tracking-widest">Configuration Panel</h2>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Map Seed</label>
+            <div className="flex gap-2">
+              <input 
+                className="bg-surface-container-highest border-none rounded text-sm w-full focus:ring-1 focus:ring-primary text-on-surface py-2 px-3 outline-none" 
+                type="text" 
+                value={mapSeed}
+                onChange={(e) => setMapSeed(e.target.value)}
+                disabled={isRunning}
+              />
+              <button 
+                onClick={onGenerateMap}
+                disabled={isRunning}
+                className="bg-surface-container-high hover:bg-surface-bright p-2 rounded text-primary transition-colors cursor-pointer disabled:opacity-50"
+                title="Generate map from current seed"
+              >
+                <span className="material-symbols-outlined text-lg" data-icon="sync">sync</span>
+              </button>
+              <button 
+                onClick={onRandomizeMap}
+                disabled={isRunning}
+                className="bg-surface-container-high hover:bg-surface-bright p-2 rounded text-primary transition-colors cursor-pointer disabled:opacity-50"
+                title="Generate a random map with a new seed"
+              >
+                <span className="material-symbols-outlined text-lg" data-icon="casino">casino</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Algorithm Selector</label>
+            <div className="relative">
+              <select 
+                className="appearance-none bg-surface-container-highest border-none rounded text-sm w-full focus:ring-1 focus:ring-primary text-on-surface py-2.5 px-3 outline-none cursor-pointer"
+                value={algorithm}
+                onChange={(e) => onAlgorithmChange(e.target.value)}
+                disabled={isRunning}
+              >
+                <option value={ALGORITHMS.ASTAR}>A* (Manhattan)</option>
+                <option value={ALGORITHMS.ASTAR_WEIGHTED}>Weighted A* (epsilon = {epsilon.toFixed(1)})</option>
+                <option value={ALGORITHMS.DIJKSTRA}>Dijkstra</option>
+                <option value={ALGORITHMS.BFS}>BFS</option>
+              </select>
+              <span className="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant pointer-events-none" data-icon="expand_more">expand_more</span>
+            </div>
+          </div>
+
+          {algorithm === ALGORITHMS.ASTAR_WEIGHTED && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider flex justify-between">
+                <span>Epsilon (Heuristic Weight)</span>
+                <span className="text-primary">{epsilon.toFixed(1)}</span>
+              </label>
+              <input
+                type="range"
+                min="2"
+                max="5"
+                step="0.1"
+                value={epsilon}
+                onChange={(e) => setEpsilon(parseFloat(e.target.value))}
+                disabled={isRunning}
+                className="w-full accent-primary cursor-pointer disabled:opacity-50"
+                title="Higher epsilon = more greedy (faster but less optimal). Range: 2 to 5."
+              />
+            </div>
+          )}
+
+          <div className="pt-2 grid grid-cols-2 gap-2">
+            <button 
+              onClick={onRunAlgorithm}
+              disabled={isRunning}
+              className="btn-primary-gradient col-span-2 py-3 rounded-lg font-bold text-on-primary text-sm shadow-lg shadow-primary/10 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+            >
+              {isRunning ? 'Running...' : 'Run Algorithm'}
+            </button>
+            <button 
+              onClick={onResetGrid}
+              disabled={isRunning}
+              className="bg-surface-container-high hover:bg-surface-bright py-2 rounded text-xs font-semibold text-on-surface transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Reset
+            </button>
+            <button 
+              onClick={() => setShowVisitedNodes(prev => !prev)}
+              disabled={isRunning}
+              className={`bg-surface-container-high hover:bg-surface-bright py-2 rounded text-xs font-semibold transition-colors cursor-pointer flex justify-center items-center gap-1 disabled:opacity-50 ${showVisitedNodes ? 'text-primary' : 'text-on-surface'}`}
+            >
+              <span className="material-symbols-outlined text-[14px]">{showVisitedNodes ? 'visibility' : 'visibility_off'}</span>
+              Nodes
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Primary Action Buttons */}
-      <div className="flex gap-4">
-        <button
-          onClick={onRunAlgorithm}
-          disabled={isRunning}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-        >
-          {isRunning ? 'Running...' : `Run ${getAlgorithmDisplayName()}`}
-        </button>
-        <button
-          onClick={onResetGrid}
-          disabled={isRunning}
-          className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-400 transition-colors"
-        >
-          Reset
-        </button>
-      </div>
-
-      {/* Visited Nodes Toggle */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setShowVisitedNodes(prev => !prev)}
-          disabled={isRunning}
-          className={`px-3 py-1 rounded text-sm transition-colors ${
-            showVisitedNodes ? 'bg-blue-400 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-          title={showVisitedNodes ? 'Hide visited nodes (showing terrain colors)' : 'Show visited nodes explored by algorithm'}
-        >
-          {showVisitedNodes ? 'Hide Visited Nodes' : 'Show Visited Nodes'}
-        </button>
-      </div>
-
-      {/* Algorithm Selection */}
-      <div className="flex gap-2 flex-wrap justify-center">
-        <AlgorithmButton
-          algo={ALGORITHMS.DIJKSTRA}
-          label="Dijkstra (weighted)"
-          currentAlgorithm={algorithm}
-          isRunning={isRunning}
-          onSelect={onAlgorithmChange}
-          activeColor="bg-green-500"
-        />
-        <AlgorithmButton
-          algo={ALGORITHMS.BFS}
-          label="BFS (unweighted)"
-          currentAlgorithm={algorithm}
-          isRunning={isRunning}
-          onSelect={onAlgorithmChange}
-          activeColor="bg-purple-500"
-        />
-        <AlgorithmButton
-          algo={ALGORITHMS.ASTAR}
-          label="A* (Manhattan)"
-          currentAlgorithm={algorithm}
-          isRunning={isRunning}
-          onSelect={onAlgorithmChange}
-          activeColor="bg-orange-500"
-        />
-        <AlgorithmButton
-          algo={ALGORITHMS.ASTAR_WEIGHTED}
-          label="Weighted A* (ε=3.0)"
-          currentAlgorithm={algorithm}
-          isRunning={isRunning}
-          onSelect={onAlgorithmChange}
-          activeColor="bg-red-500"
-        />
-      </div>
-
-      {/* Edit Mode Selection */}
-      <div className="flex gap-2 flex-wrap justify-center">
-        <span className="text-sm font-semibold self-center">Edit Mode:</span>
-        <EditModeButton
-          mode={EDIT_MODES.WALL}
-          label="Wall"
-          currentMode={editMode}
-          isRunning={isRunning}
-          onSelect={setEditMode}
-          activeColor="bg-gray-800"
-        />
-        <EditModeButton
-          mode={EDIT_MODES.WEIGHT}
-          label="Weight (click to cycle)"
-          currentMode={editMode}
-          isRunning={isRunning}
-          onSelect={setEditMode}
-          activeColor="bg-orange-500"
-        />
-        <EditModeButton
-          mode={EDIT_MODES.START}
-          label="Move Start"
-          currentMode={editMode}
-          isRunning={isRunning}
-          onSelect={setEditMode}
-          activeColor="bg-green-500"
-        />
-        <EditModeButton
-          mode={EDIT_MODES.FINISH}
-          label="Move Finish"
-          currentMode={editMode}
-          isRunning={isRunning}
-          onSelect={setEditMode}
-          activeColor="bg-red-500"
-        />
+      <div className="bg-surface-container-low rounded-xl p-5 space-y-4">
+        <div className="flex items-center space-x-2 text-primary">
+          <span className="material-symbols-outlined text-sm" data-icon="edit_square">edit_square</span>
+          <h2 className="text-xs font-bold uppercase tracking-widest">Edit Mode</h2>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2">
+          <button 
+            onClick={() => setEditMode(EDIT_MODES.WALL)}
+            disabled={isRunning}
+            className={`flex items-center gap-2 p-3 rounded-lg transition-all cursor-pointer disabled:opacity-50 ${editMode === EDIT_MODES.WALL ? 'bg-surface-bright border-2 border-primary text-primary' : 'bg-surface-container hover:bg-surface-bright text-on-surface-variant'}`}
+          >
+            <span className="material-symbols-outlined text-sm" data-icon="grid_view" data-weight="fill" style={{ fontVariationSettings: "'FILL' 1" }}>grid_view</span>
+            <span className="text-[10px] font-bold uppercase">Add Wall</span>
+          </button>
+          
+          <button 
+            onClick={() => setEditMode(EDIT_MODES.WEIGHT)}
+            disabled={isRunning}
+            className={`flex items-center gap-2 p-3 rounded-lg transition-all cursor-pointer disabled:opacity-50 ${editMode === EDIT_MODES.WEIGHT ? 'bg-surface-bright border-2 border-primary text-primary' : 'bg-surface-container hover:bg-surface-bright text-on-surface-variant'}`}
+          >
+            <span className="material-symbols-outlined text-sm" data-icon="layers">layers</span>
+            <span className="text-[10px] font-bold uppercase">Edit Terrain</span>
+          </button>
+          
+          <button 
+            onClick={() => setEditMode(EDIT_MODES.START)}
+            disabled={isRunning}
+            className={`flex items-center gap-2 p-3 rounded-lg transition-all cursor-pointer disabled:opacity-50 ${editMode === EDIT_MODES.START ? 'bg-surface-bright border-2 border-primary text-primary' : 'bg-surface-container hover:bg-surface-bright text-on-surface-variant'}`}
+          >
+            <span className="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+            <span className="text-[10px] font-bold uppercase">Start Pos</span>
+          </button>
+          
+          <button 
+            onClick={() => setEditMode(EDIT_MODES.FINISH)}
+            disabled={isRunning}
+            className={`flex items-center gap-2 p-3 rounded-lg transition-all cursor-pointer disabled:opacity-50 ${editMode === EDIT_MODES.FINISH ? 'bg-surface-bright border-2 border-primary text-primary' : 'bg-surface-container hover:bg-surface-bright text-on-surface-variant'}`}
+          >
+            <span className="material-symbols-outlined text-sm" data-icon="flag">flag</span>
+            <span className="text-[10px] font-bold uppercase">Finish Pos</span>
+          </button>
+        </div>
+        
+        <p className="text-[10px] text-on-surface-variant italic text-center pt-2">
+          "Click cell to toggle/change terrain"
+        </p>
       </div>
     </>
   );

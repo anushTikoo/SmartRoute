@@ -23,15 +23,20 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
   // Currently selected algorithm
   const [algorithm, setAlgorithm] = useState(ALGORITHMS.DIJKSTRA);
 
+  // Epsilon (weight factor) for Weighted A* algorithm
+  // Range: 2 to 5. Higher values make the algorithm more greedy (faster but less optimal)
+  const [epsilon, setEpsilon] = useState(3.0);
+
   // Results and completion state for each algorithm
   const [dijkstraResult, setDijkstraResult] = useState(null);
   const [bfsResult, setBfsResult] = useState(null);
   const [astarResult, setAstarResult] = useState(null);
-  const [astarWeightedResult, setAstarWeightedResult] = useState(null);
+  // Store multiple Weighted A* results keyed by epsilon value
+  // Structure: { epsilon: { result, visitedNodes, path, complete } }
+  const [astarWeightedResults, setAstarWeightedResults] = useState({});
   const [dijkstraComplete, setDijkstraComplete] = useState(false);
   const [bfsComplete, setBfsComplete] = useState(false);
   const [astarComplete, setAstarComplete] = useState(false);
-  const [astarWeightedComplete, setAstarWeightedComplete] = useState(false);
 
   // Store visited nodes and paths for each algorithm (for visualization restoration)
   const [dijkstraVisitedNodes, setDijkstraVisitedNodes] = useState([]);
@@ -40,8 +45,6 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
   const [bfsPath, setBfsPath] = useState([]);
   const [astarVisitedNodes, setAstarVisitedNodes] = useState([]);
   const [astarPath, setAstarPath] = useState([]);
-  const [astarWeightedVisitedNodes, setAstarWeightedVisitedNodes] = useState([]);
-  const [astarWeightedPath, setAstarWeightedPath] = useState([]);
 
   const animationStartTime = useRef(null);
 
@@ -53,19 +56,16 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
     setDijkstraResult(null);
     setBfsResult(null);
     setAstarResult(null);
-    setAstarWeightedResult(null);
+    setAstarWeightedResults({});
     setDijkstraComplete(false);
     setBfsComplete(false);
     setAstarComplete(false);
-    setAstarWeightedComplete(false);
     setDijkstraVisitedNodes([]);
     setDijkstraPath([]);
     setBfsVisitedNodes([]);
     setBfsPath([]);
     setAstarVisitedNodes([]);
     setAstarPath([]);
-    setAstarWeightedVisitedNodes([]);
-    setAstarWeightedPath([]);
   }, []);
 
   /**
@@ -88,8 +88,10 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
         path = astarPath;
         break;
       case ALGORITHMS.ASTAR_WEIGHTED:
-        visitedNodes = astarWeightedVisitedNodes;
-        path = astarWeightedPath;
+        // Get the cached result for current epsilon if it exists
+        const cachedWeighted = astarWeightedResults[epsilon];
+        visitedNodes = cachedWeighted?.visitedNodes || [];
+        path = cachedWeighted?.path || [];
         break;
       default:
         visitedNodes = [];
@@ -110,7 +112,7 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
       });
       return newGrid;
     });
-  }, [dijkstraVisitedNodes, dijkstraPath, bfsVisitedNodes, bfsPath, astarVisitedNodes, astarPath, astarWeightedVisitedNodes, astarWeightedPath, setGrid]);
+  }, [dijkstraVisitedNodes, dijkstraPath, bfsVisitedNodes, bfsPath, astarVisitedNodes, astarPath, astarWeightedResults, epsilon, setGrid]);
 
   /**
    * Handles the algorithm selection change.
@@ -224,7 +226,7 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
         shortestPath = astarResult.shortestPath;
         break;
       case ALGORITHMS.ASTAR_WEIGHTED:
-        const astarWeightedResult = astarWeighted(freshGrid, startNode, finishNode);
+        const astarWeightedResult = astarWeighted(freshGrid, startNode, finishNode, epsilon);
         visitedNodes = astarWeightedResult.visitedNodes;
         shortestPath = astarWeightedResult.shortestPath;
         break;
@@ -259,9 +261,16 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
         setAstarPath(shortestPath);
         break;
       case ALGORITHMS.ASTAR_WEIGHTED:
-        setAstarWeightedResult(resultData);
-        setAstarWeightedVisitedNodes(visitedNodes);
-        setAstarWeightedPath(shortestPath);
+        // Store result keyed by epsilon value to support multiple results
+        setAstarWeightedResults(prev => ({
+          ...prev,
+          [epsilon]: {
+            result: resultData,
+            visitedNodes,
+            path: shortestPath,
+            complete: false
+          }
+        }));
         break;
     }
 
@@ -281,28 +290,37 @@ export function useAlgorithmRunner(grid, startPos, finishPos, setGrid, isRunning
           setAstarComplete(true);
           break;
         case ALGORITHMS.ASTAR_WEIGHTED:
-          setAstarWeightedComplete(true);
+          // Mark the current epsilon result as complete
+          setAstarWeightedResults(prev => ({
+            ...prev,
+            [epsilon]: {
+              ...prev[epsilon],
+              complete: true
+            }
+          }));
           break;
       }
     };
 
     animateVisitedThenPath(visitedNodes, shortestPath, algorithm, onComplete);
-  }, [grid, startPos, finishPos, algorithm, isRunning, setGrid, setIsRunning, setShowVisitedNodes, animateVisitedThenPath]);
+  }, [grid, startPos, finishPos, algorithm, epsilon, isRunning, setGrid, setIsRunning, setShowVisitedNodes, animateVisitedThenPath]);
 
   return {
     // State
     algorithm,
+    epsilon,
     dijkstraResult,
     bfsResult,
     astarResult,
-    astarWeightedResult,
+    // Now returns all Weighted A* results keyed by epsilon
+    astarWeightedResults,
     dijkstraComplete,
     bfsComplete,
     astarComplete,
-    astarWeightedComplete,
 
     // Actions
     setAlgorithm: handleAlgorithmChange,
+    setEpsilon,
     runAlgorithm,
     restoreVisualization,
     clearAlgorithmData,

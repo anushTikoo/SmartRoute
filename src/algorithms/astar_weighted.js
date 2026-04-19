@@ -1,7 +1,19 @@
-// Weighted A* (ε-admissible A*) with ε=3.0
-// Uses a weighted heuristic to explore fewer nodes, trading optimality for speed
-// Time Complexity: O(E log V) with binary heap
-//Giving more weightage to heuristic (manhattan distance in this case)
+/**
+ * Weighted A* (ε-admissible A*)
+ * Uses a weighted heuristic to explore fewer nodes, trading optimality for speed.
+ * Time Complexity: O(E log V) with binary heap
+ *
+ * The epsilon (ε) parameter controls how much weight is given to the heuristic:
+ * - ε = 1: Standard A* (optimal path)
+ * - ε > 1: More greedy, faster but suboptimal (ε=3 explores fewer nodes than ε=2)
+ * - Typical range: 2 to 5
+ *
+ * @param {Array} grid - The grid of nodes
+ * @param {Object} startNode - Starting node
+ * @param {Object} finishNode - Goal node
+ * @param {number} epsilon - Weight factor (default: 3.0)
+ * @returns {Object} Object containing visitedNodes and shortestPath
+ */
 
 // Manhattan distance heuristic
 function manhattanDistance(nodeA, nodeB) {
@@ -90,11 +102,10 @@ class MinHeap {
   }
 }
 
-export function astarWeighted(grid, startNode, finishNode) {
+export function astarWeighted(grid, startNode, finishNode, epsilon = 3.0) {
   const visitedNodesInOrder = [];
   const openSet = new MinHeap();
   const closedSet = new Set();
-  const epsilon = 3.0; // Weight factor - makes heuristic more dominant (ε>1 = greedy)
 
   // Reset all nodes to prevent pollution from previous runs
   for (const row of grid) {
