@@ -124,7 +124,6 @@ function CellComponent({ row, col, isStart, isFinish, isWall, isVisited, isInPat
       onClick={() => onClick(row, col)}
       title={`Weight: ${weight}`}
     >
-      {!isWall && !isStart && !isFinish && weight}
     </div>
   );
 }

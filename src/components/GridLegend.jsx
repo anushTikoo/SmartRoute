@@ -58,6 +58,26 @@ export function GridLegend() {
               <span className="text-[9px] font-medium text-on-surface-variant tracking-widest">COST: 8.0</span>
             </div>
           </div>
+          {/* 6 - FOREST */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-sm border-2 bg-emerald-700 text-white shadow-[0_0_10px_rgba(16,185,129,0.7)] border-emerald-400 flex items-center justify-center text-sm font-bold select-none cursor-pointer">
+              6
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-on-surface uppercase tracking-tighter leading-none">Forest</span>
+              <span className="text-[9px] font-medium text-on-surface-variant tracking-widest">COST: 12.0</span>
+            </div>
+          </div>
+          {/* 7 - SWAMP */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-sm border-2 bg-purple-800 text-white shadow-[0_0_10px_rgba(236,72,153,0.7)] border-pink-400 flex items-center justify-center text-sm font-bold select-none cursor-pointer">
+              7
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-on-surface uppercase tracking-tighter leading-none">Swamp</span>
+              <span className="text-[9px] font-medium text-on-surface-variant tracking-widest">COST: 16.0</span>
+            </div>
+          </div>
           {/* 8 - MOUNTAIN */}
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-sm border-2 bg-slate-600 text-white shadow-[0_0_10px_rgba(34,211,238,0.7)] border-cyan-300 flex items-center justify-center text-sm font-bold select-none cursor-pointer">
@@ -66,6 +86,16 @@ export function GridLegend() {
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-on-surface uppercase tracking-tighter leading-none">Mountain</span>
               <span className="text-[9px] font-medium text-on-surface-variant tracking-widest">COST: 20.0</span>
+            </div>
+          </div>
+          {/* 9 - SNOW */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-sm border-2 bg-slate-100 text-gray-800 shadow-[0_0_12px_rgba(147,197,253,0.8)] border-blue-300 flex items-center justify-center text-sm font-bold select-none cursor-pointer">
+              9
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-on-surface uppercase tracking-tighter leading-none">Snow</span>
+              <span className="text-[9px] font-medium text-on-surface-variant tracking-widest">COST: 30.0</span>
             </div>
           </div>
           {/* Wall */}
